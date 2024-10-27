@@ -1,0 +1,48 @@
+receivers:
+  docker_stats:
+    env_vars_to_metric_labels:
+      OTEL_SERVICE_NAME: service.name
+  otlp:
+    protocols:
+      http:
+        endpoint: "otelcollector:4318"
+      grpc:
+        endpoint: "otelcollector:4317"
+  kafkametrics:
+    brokers:
+      - host.docker.internal:9092
+      - host.docker.internal:9093
+      - host.docker.internal:9094
+    protocol_version: 2.0.0
+    scrapers:
+      - brokers
+      - topics
+      - consumers
+
+exporters:
+  otlp:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+    enable_open_metrics: true
+    add_metric_suffixes: false
+    resource_to_telemetry_conversion:
+      enabled: true
+
+processors:
+  batch:
+  resourcedetection/docker:
+    detectors: [env, docker]
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch, resourcedetection/docker]
+      exporters: [otlp]
+    metrics:
+      receivers: [otlp, kafkametrics]
+      processors: [batch, resourcedetection/docker]
+      exporters: [prometheus]

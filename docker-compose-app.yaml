@@ -1,0 +1,108 @@
+name: app-obs-day
+services:
+  producer:
+    build:
+      context: ./producer
+      dockerfile: ./Dockerfile
+    ports:
+      - "8083:8083"
+    environment:
+      - BOOTSTRAP_SERVERS=host.docker.internal:9092,host.docker.internal:9093,host.docker.internal:9094
+      - TOPIC=topic1
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otelcollector:4317
+      - OTEL_SERVICE_NAME=producer
+      - OTEL_SEMCONV_STABILITY_OPT_IN=http
+      - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+      - OTEL_JMX_TARGET_SYSTEM=kafka-broker
+      - OTEL_INSTRUMENTATION_LOGBACK_APPENDER_EXPERIMENTAL_CAPTURE_KEY_VALUE_PAIR_ATTRIBUTES=true
+      - OTEL_TRACE_SAMPLER=traceidratio
+      - OTEL_TRACE_SAMPLER_ARG=0.001
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+
+  consumer:
+    build:
+      context: ./consumer
+      dockerfile: ./Dockerfile
+    environment:
+      - BOOTSTRAP_SERVERS=host.docker.internal:9092,host.docker.internal:9093,host.docker.internal:9094
+      - TOPIC=topic1
+      - CONSUMER_GROUP=group1
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otelcollector:4317
+      - OTEL_SERVICE_NAME=consumer
+      - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+      - OTEL_JMX_TARGET_SYSTEM=kafka-broker
+      - OTEL_INSTRUMENTATION_LOGBACK_APPENDER_EXPERIMENTAL_CAPTURE_KEY_VALUE_PAIR_ATTRIBUTES=true
+      - OTEL_TRACE_SAMPLER=traceidratio
+      - OTEL_TRACE_SAMPLER_ARG=0.001
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 256M
+  #aspire:
+  #  image: mcr.microsoft.com/dotnet/nightly/aspire-dashboard:latest
+  #  ports:
+  #    - "18888:18888"
+  #    - "4317:18889"
+  #  environment:
+  #    - DOTNET_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS=true
+
+  otelcollector:
+    image: otel/opentelemetry-collector-contrib:latest
+    command: ["--config=/etc/otel-collector-config.yml"]
+    ports:
+      - "8889:8889"   # Prometheus exporter metrics
+      - "13133:13133" # health_check extension
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318"   # OTLP http receiver
+      - "55679:55679" # zpages extension
+    volumes:
+      - //var/run/docker.sock:/var/run/docker.sock
+      - ./configs/otel-collector-config.yml:/etc/otel-collector-config.yml
+    environment:
+      - TMPDIR=/usr/home
+    depends_on:
+      - jaeger
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "14250:14250"
+      - "14268:14268"
+      - "6831:6831/udp"
+      - "16686:16686"
+      - "16685:16685"
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./configs/prometheus-otel.yml:/etc/prometheus/prometheus.yml
+    entrypoint:
+      - /bin/prometheus
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --enable-feature=exemplar-storage
+    ports:
+      - "9090:9090"
+    depends_on:
+      - otelcollector
+
+  grafana:
+    image: grafana/grafana
+    container_name: grafana-obs-day
+    ports:
+      - 3003:3000
+    restart: unless-stopped
+    environment:
+      - GF_LOG_LEVEL=warn
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+      - GF_AUTH_BASIC_ENABLED=false
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+    volumes:
+      - ./configs/grafana:/etc/grafana/provisioning/datasources
+      - grafana-storage:/var/lib/grafana
+    privileged: true
+volumes:
+  grafana-storage: {}
