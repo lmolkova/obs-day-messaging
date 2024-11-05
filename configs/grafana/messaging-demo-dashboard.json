@@ -25,6 +25,12 @@
     },
     {
       "type": "panel",
+      "id": "stat",
+      "name": "Stat",
+      "version": ""
+    },
+    {
+      "type": "panel",
       "id": "timeseries",
       "name": "Time series",
       "version": ""
@@ -132,6 +138,7 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "11.2.2+security-01",
       "targets": [
         {
           "datasource": {
@@ -139,11 +146,24 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by (service_name) (jvm_memory_used_after_last_gc) / sum by (service_name) (jvm_memory_limit)",
+          "expr": "sum by (service_name) (jvm_memory_used_after_last_gc_bytes) / sum by (service_name) (jvm_memory_limit_bytes)",
           "instant": false,
-          "legendFormat": "__auto",
+          "legendFormat": "{{service_name}}",
           "range": true,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service_name) (jvm_memory_heap_used_by)/ sum by (service_name) (jvm_memory_heap_max_by)",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "{{service_name}}",
+          "range": true,
+          "refId": "B"
         }
       ],
       "title": "Memory usage (after GC)",
@@ -157,40 +177,7 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
+            "mode": "thresholds"
           },
           "mappings": [],
           "thresholds": {
@@ -218,17 +205,23 @@
       },
       "id": 8,
       "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
         },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
       },
+      "pluginVersion": "11.2.2+security-01",
       "targets": [
         {
           "datasource": {
@@ -236,15 +229,15 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "avg by (service_name) (jvm_cpu_recent_utilization)",
+          "expr": "avg by (service_name) (jvm_cpu_recent_utilization_ratio)",
           "instant": false,
-          "legendFormat": "__auto",
+          "legendFormat": "{{service_name}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "CPU utilization",
-      "type": "timeseries"
+      "type": "stat"
     },
     {
       "datasource": {
@@ -333,7 +326,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum by (http_route, error_type, le)(rate(http_server_request_duration_bucket[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (http_route, error_type, le)(rate(http_server_request_duration_seconds_bucket[5m])))",
           "instant": false,
           "legendFormat": "p95 {{http_route}}",
           "range": true,
@@ -399,7 +392,8 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "reqps"
         },
         "overrides": []
       },
@@ -429,14 +423,14 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by (http_route, error_type) (rate(http_server_request_duration_count[1m]))",
+          "expr": "sum by (http_route, error_type) (rate(http_server_request_duration_seconds_count[5m]))",
           "instant": false,
           "legendFormat": "",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "HTTP request rate per second",
+      "title": "Incoming HTTP requests - throughput",
       "type": "timeseries"
     },
     {
@@ -840,13 +834,13 @@
     "list": []
   },
   "time": {
-    "from": "now-30m",
+    "from": "now-15m",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",
   "title": "Demo dashboard",
   "uid": "fe23cyxly93i8e",
-  "version": 5,
+  "version": 2,
   "weekStart": ""
 }

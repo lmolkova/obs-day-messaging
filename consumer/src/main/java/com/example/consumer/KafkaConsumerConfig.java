@@ -3,6 +3,8 @@ package com.example.consumer;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.common.protocol.Message;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,7 +48,9 @@ public class KafkaConsumerConfig {
         props.put(
           ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
           StringDeserializer.class);
+        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
         props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
+        //props.put(ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG, 2500);
 
         return new DefaultKafkaConsumerFactory<>(props);
     }
@@ -61,6 +65,35 @@ public class KafkaConsumerConfig {
 
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
         return factory;
+    }
+
+    //@KafkaListener(topics = "${TOPIC}", groupId = "${CONSUMER_GROUP}", batch = "true")
+    public void processMessage(ConsumerRecords<String, String> records,
+                               Acknowledgment acknowledgment) throws InterruptedException {
+
+        int random = ThreadLocalRandom.current().nextInt(100);
+        for (ConsumerRecord<String, String> consumerRecord : records) {
+            LOGGER.atInfo()
+                    .addKeyValue("key", consumerRecord.key())
+                    .addKeyValue("partition", consumerRecord.partition())
+                    .addKeyValue("topic", consumerRecord.topic())
+                    .addKeyValue("offset", consumerRecord.offset())
+                    .addKeyValue("message", consumerRecord.value())
+                    .log("Received message");
+
+            if (consumerRecord.value().equals("error")) {
+                throw new RuntimeException("Unrecognized message format, invalid character at position 42");
+            }
+        }
+
+        Thread.sleep(random);
+        if (random % 511 == 0) {
+            LOGGER.atWarn().log("Something bad happened");
+            nack(acknowledgment);
+            throw new RuntimeException("Something bad happened");
+        }
+
+        ack(acknowledgment);
     }
 
     @KafkaListener(topics = "${TOPIC}", groupId = "${CONSUMER_GROUP}")
@@ -79,20 +112,24 @@ public class KafkaConsumerConfig {
 
         Thread.sleep(random);
         if (random % 511 == 0) {
-            LOGGER.atWarn().log("Simulating an error");
+            LOGGER.atWarn().log("Something bad happened");
             nack(acknowledgment);
-            throw new RuntimeException("Simulating an error");
+            throw new RuntimeException("Something bad happened");
+        }
+
+        if (consumerRecord.value().equals("error")) {
+            throw new RuntimeException("Unrecognized message format, invalid character at position 42");
         }
 
         ack(acknowledgment);
     }
 
-    @WithSpan
+    @WithSpan("ack")
     private void ack(Acknowledgment acknowledgment) {
         acknowledgment.acknowledge();
     }
 
-    @WithSpan
+    @WithSpan("nack")
     private void nack(Acknowledgment acknowledgment) {
         acknowledgment.nack(Duration.ofSeconds(1));
     }

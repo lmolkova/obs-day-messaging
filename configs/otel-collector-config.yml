@@ -1,7 +1,4 @@
 receivers:
-  docker_stats:
-    env_vars_to_metric_labels:
-      OTEL_SERVICE_NAME: service.name
   otlp:
     protocols:
       http:
@@ -19,17 +16,45 @@ receivers:
       - topics
       - consumers
 
+  jmx/1:
+    jar_path: /opt/opentelemetry-jmx-metrics.jar
+    endpoint: service:jmx:rmi:///jndi/rmi://host.docker.internal:9991/jmxrmi
+    target_system: jvm,kafka
+    collection_interval: 10s
+    log_level: warn
+    resource_attributes:
+      service.name: broker1
+  jmx/2:
+    jar_path: /opt/opentelemetry-jmx-metrics.jar
+    endpoint: service:jmx:rmi:///jndi/rmi://host.docker.internal:9992/jmxrmi
+    target_system: jvm,kafka
+    collection_interval: 10s
+    log_level: warn
+    resource_attributes:
+      service.name: broker2
+  jmx/3:
+    jar_path: /opt/opentelemetry-jmx-metrics.jar
+    endpoint: service:jmx:rmi:///jndi/rmi://host.docker.internal:9993/jmxrmi
+    target_system: jvm,kafka
+    collection_interval: 10s
+    log_level: warn
+    resource_attributes:
+      service.name: broker3
+
 exporters:
   otlp:
     endpoint: jaeger:4317
     tls:
       insecure: true
-  prometheus:
-    endpoint: "0.0.0.0:8889"
-    enable_open_metrics: true
-    add_metric_suffixes: false
-    resource_to_telemetry_conversion:
-      enabled: true
+  otlp/2:
+    endpoint: aspire:18889
+    tls:
+      insecure: true
+
+  otlphttp:
+    metrics_endpoint: http://prometheus:9090/api/v1/otlp/v1/metrics
+    tls:
+      insecure: true
 
 processors:
   batch:
@@ -41,8 +66,12 @@ service:
     traces:
       receivers: [otlp]
       processors: [batch, resourcedetection/docker]
-      exporters: [otlp]
+      exporters: [otlp, otlp/2]
     metrics:
-      receivers: [otlp, kafkametrics]
+      receivers: [otlp, kafkametrics, jmx/1, jmx/2, jmx/3]
       processors: [batch, resourcedetection/docker]
-      exporters: [prometheus]
+      exporters: [otlp/2, otlphttp]
+    logs:
+      receivers: [otlp]
+      processors: [batch, resourcedetection/docker]
+      exporters: [otlp/2]
